@@ -25,7 +25,7 @@ jobs:
 
       - name: Run processing script
         run: |
-          cat << 'EOF' > process.py
+cat << 'EOF' > process.py
           import requests
           import re
 
@@ -35,22 +35,28 @@ jobs:
 
           def check_link(url):
               try:
-                  # 添加 headers 伪装成浏览器，避免被部分服务器拦截
-                  headers = {'User-Agent': 'Mozilla/5.0'}
+                  # 添加必要的 headers，模拟真实浏览器访问
+                  headers = {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+                      'Referer': 'https://cdnlivetv.tv/'
+                  }
                   response = requests.head(url, timeout=10, allow_redirects=True, headers=headers)
                   return response.status_code == 200
-              except Exception as e:
+              except:
                   return False
 
           try:
               response = requests.get(source_url, timeout=15)
               content = response.text
-              print(f"成功获取内容，前200个字符: {content[:200]}")
               
-              # 优化后的正则：兼容不同的换行符和潜在空格
-              # 匹配格式: #EXTINF:...,名称 \n URL
-              items = re.findall(r'#EXTINF:.*?,(.*?)\r?\n(https?://\S+)', content)
-              print(f"共匹配到 {len(items)} 个频道")
+              # 新的正则表达式：
+              # 1. 匹配 #EXTINF 行，获取逗号后的名称
+              # 2. 通过 (?:#.*?\n)* 跳过中间所有以 # 开头的行（EXTVLCOPT等）
+              # 3. 匹配下一行以 http 开头的链接地址
+              pattern = r'#EXTINF:-1.*?,(.*?)\n(?:#.*?\n)*(https?://\S+)'
+              items = re.findall(pattern, content)
+              
+              print(f"匹配到 {len(items)} 个频道候选")
               
               valid_count = 0
               with open(output_file, 'w', encoding='utf-8') as f:
@@ -58,9 +64,9 @@ jobs:
                       if check_link(link.strip()):
                           f.write(f"{name.strip()},{player_prefix}{link.strip()}\n")
                           valid_count += 1
-              print(f"成功写入 {valid_count} 个有效链接到 {output_file}")
+              print(f"成功写入 {valid_count} 个有效链接")
           except Exception as e:
-              print(f"发生错误: {e}")
+              print(f"错误: {e}")
           EOF
           python process.py
 
