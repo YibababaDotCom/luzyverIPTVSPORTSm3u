@@ -5,8 +5,8 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
-permissions:                # 添加这一部分
-  contents: write           # 授予写入仓库内容的权限
+permissions:
+  contents: write
 
 jobs:
   update-links:
@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }} # 显式传入 token
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -37,26 +35,32 @@ jobs:
 
           def check_link(url):
               try:
-                  # 只检查 HEAD，快速判断链接是否响应
-                  response = requests.head(url, timeout=5, allow_redirects=True)
+                  # 添加 headers 伪装成浏览器，避免被部分服务器拦截
+                  headers = {'User-Agent': 'Mozilla/5.0'}
+                  response = requests.head(url, timeout=10, allow_redirects=True, headers=headers)
                   return response.status_code == 200
-              except:
+              except Exception as e:
                   return False
 
           try:
               response = requests.get(source_url, timeout=15)
               content = response.text
+              print(f"成功获取内容，前200个字符: {content[:200]}")
               
-              # 正则提取名称和URL
-              items = re.findall(r'#EXTINF:-1,(.*?)\n(http[s]?://\S+)', content)
+              # 优化后的正则：兼容不同的换行符和潜在空格
+              # 匹配格式: #EXTINF:...,名称 \n URL
+              items = re.findall(r'#EXTINF:.*?,(.*?)\r?\n(https?://\S+)', content)
+              print(f"共匹配到 {len(items)} 个频道")
               
+              valid_count = 0
               with open(output_file, 'w', encoding='utf-8') as f:
                   for name, link in items:
-                      if check_link(link):
-                          f.write(f"{name.strip()},{player_prefix}{link}\n")
-              print(f"Successfully generated {output_file}")
+                      if check_link(link.strip()):
+                          f.write(f"{name.strip()},{player_prefix}{link.strip()}\n")
+                          valid_count += 1
+              print(f"成功写入 {valid_count} 个有效链接到 {output_file}")
           except Exception as e:
-              print(f"Error: {e}")
+              print(f"发生错误: {e}")
           EOF
           python process.py
 
@@ -65,5 +69,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add iptv_links.txt
-          # 如果文件有变化才提交
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update IPTV links" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update IPTV links" && git push)
