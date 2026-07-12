@@ -35,7 +35,6 @@ jobs:
 
           def check_link(url):
               try:
-                  # 添加必要的 headers，模拟真实浏览器访问
                   headers = {
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
                       'Referer': 'https://cdnlivetv.tv/'
@@ -45,28 +44,35 @@ jobs:
               except:
                   return False
 
+          def is_live_event(name):
+              # 定义包含日期或时间的特征模式
+              # 匹配: 星期 (Mon-Sun), 月份 (Jan-Dec), 或 AM/PM 时间格式
+              date_pattern = r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun)|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)|\d{1,2}:\d{2}\s?(AM|PM)'
+              if re.search(date_pattern, name, re.IGNORECASE):
+                  return True
+              return False
+
           try:
               response = requests.get(source_url, timeout=15)
               content = response.text
               
-              # 新的正则表达式：
-              # 1. 匹配 #EXTINF 行，获取逗号后的名称
-              # 2. 通过 (?:#.*?\n)* 跳过中间所有以 # 开头的行（EXTVLCOPT等）
-              # 3. 匹配下一行以 http 开头的链接地址
+              # 匹配频道名称和链接
               pattern = r'#EXTINF:-1.*?,(.*?)\n(?:#.*?\n)*(https?://\S+)'
               items = re.findall(pattern, content)
-              
-              print(f"匹配到 {len(items)} 个频道候选")
               
               valid_count = 0
               with open(output_file, 'w', encoding='utf-8') as f:
                   for name, link in items:
+                      # 过滤逻辑：如果包含日期时间，则跳过
+                      if is_live_event(name.strip()):
+                          continue
+                          
                       if check_link(link.strip()):
                           f.write(f"{name.strip()},{player_prefix}{link.strip()}\n")
                           valid_count += 1
-              print(f"成功写入 {valid_count} 个有效链接")
+              print(f"处理完成，共写入 {valid_count} 个有效频道")
           except Exception as e:
-              print(f"错误: {e}")
+              print(f"发生错误: {e}")
           EOF
           python process.py
 
