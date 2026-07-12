@@ -2,8 +2,11 @@ name: Update IPTV Links
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天北京时间早上8点运行（UTC时间0点）
-  workflow_dispatch:    # 支持手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:                # 添加这一部分
+  contents: write           # 授予写入仓库内容的权限
 
 jobs:
   update-links:
@@ -11,6 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # 显式传入 token
 
       - name: Set up Python
         uses: actions/setup-python@v4
