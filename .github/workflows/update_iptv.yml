@@ -2,8 +2,12 @@ name: Update IPTV Links
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0/30 * * * *'
   workflow_dispatch:
+
+concurrency:
+  group: update-iptv
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -13,72 +17,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: pip install requests
 
       - name: Run processing script
-        run: |
-          cat << 'EOF' > process.py
-          import requests
-          import re
-
-          source_url = "https://raw.githubusercontent.com/luzyver/IPTV/refs/heads/main/SPORTS.m3u"
-          output_file = "iptv_links.txt"
-          player_prefix = "https://yibababa.com/player/tcplayer/?url="
-
-          def check_link(url):
-              try:
-                  headers = {
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
-                      'Referer': 'https://cdnlivetv.tv/'
-                  }
-                  response = requests.head(url, timeout=10, allow_redirects=True, headers=headers)
-                  return response.status_code == 200
-              except:
-                  return False
-
-          def is_live_event(name):
-              # 定义包含日期或时间的特征模式
-              # 匹配: 星期 (Mon-Sun), 月份 (Jan-Dec), 或 AM/PM 时间格式
-              date_pattern = r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun)|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)|\d{1,2}:\d{2}\s?(AM|PM)'
-              if re.search(date_pattern, name, re.IGNORECASE):
-                  return True
-              return False
-
-          try:
-              response = requests.get(source_url, timeout=15)
-              content = response.text
-              
-              # 匹配频道名称和链接
-              pattern = r'#EXTINF:-1.*?,(.*?)\n(?:#.*?\n)*(https?://\S+)'
-              items = re.findall(pattern, content)
-              
-              valid_count = 0
-              with open(output_file, 'w', encoding='utf-8') as f:
-                  for name, link in items:
-                      # 过滤逻辑：如果包含日期时间，则跳过
-                      if is_live_event(name.strip()):
-                          continue
-                          
-                      if check_link(link.strip()):
-                          f.write(f"{name.strip()},{player_prefix}{link.strip()}\n")
-                          valid_count += 1
-              print(f"处理完成，共写入 {valid_count} 个有效频道")
-          except Exception as e:
-              print(f"发生错误: {e}")
-          EOF
-          python process.py
+        run: python process.py
 
       - name: Commit and push changes
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add iptv_links.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update IPTV links" && git push)
+          
+          # 检查是否有内容变更，仅在变更时提交
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update iptv links $(date +'%Y-%m-%d %H:%M')"
+            git push
+          else
+            echo "No changes detected, skipping commit."
+          fi
